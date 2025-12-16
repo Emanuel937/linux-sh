@@ -1,0 +1,67 @@
+#!/bin/bash
+# AUTHOR: EMANUEL ABIZIMI
+# Fonction pour vérifier les arguments
+if [ $# -eq 0 ]; then
+    echo "Usage: $0 -F <filename> -l <language ex.: php8>"
+    exit 1
+fi
+# Analyse des arguments
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -F)
+            if [ -f "$2" ]; then
+                FILE="$2"
+                shift 2
+            else
+                echo "THIS FILE DOESN'T EXIST: $2"
+                exit 1
+            fi
+            ;;
+        -L) 
+           if [ $1 = "-L" ]; then
+                COMPILATOR="$2"
+                shift 2
+            else
+              echo "MISSING -L argument, usage:  $0 -F <filename> -L <language ex.: php8> "
+              exit 1
+            fi
+            ;;
+        *)
+            echo "NOT VALID ARGUMENTS: Usage: $0 -F <filename> -L <language ex.: php8>"
+            exit 1
+            ;;
+    esac
+done
+
+
+LAST_MODIFICATION=$(stat -f "%Sm" -t "%Y-%m-%d %H:%M:%S" "$1")
+
+# Démarre le processus Python et enregistre son PID
+function startProcess() {
+    $COMPILATOR $FILE &
+    SCRIPT_PID=$!
+    echo "Processus Python démarré avec PID $SCRIPT_PID"
+}
+# Vérifie les modifications et gère le processus Python
+function killThenAddProcessus() {
+    local message=0
+
+    if [ -f "$FILE" ]; then
+        local CURRENT_MODIFICATION=$(stat -f "%Sm" -t "%Y-%m-%d %H:%M:%S" "$1")
+        if [ "$LAST_MODIFICATION" != "$CURRENT_MODIFICATION" ]; then
+            if [ -n "$SCRIPT_PID" ] && kill -0 "$SCRIPT_PID" 2>/dev/null; then
+                kill "$SCRIPT_PID"
+            fi
+            startPythonProcess "$FILE"
+            LAST_MODIFICATION="$CURRENT_MODIFICATION"
+        fi
+    else
+        echo "Le fichier $FILE n'existe pas."
+        message=1
+    fi
+}
+startProcess "$FILE"
+while true; do
+    killThenAddProcessus "$FILE"
+    sleep 1
+done
