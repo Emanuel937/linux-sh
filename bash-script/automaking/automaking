@@ -1,0 +1,186 @@
+#!/bin/bash
+
+# DEPENDENCIES:
+# - entr
+# - cmake
+# - make
+
+# Files/folders to watch for changes
+filesWatched="src include"
+
+# Checks whether a command is installed
+checkDependency() {
+    local cmd=$1
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+        echo "$cmd is not installed."
+        installDependency "$cmd"
+    else
+        echo "$cmd is already installed."
+    fi
+}
+
+# Create necessary folders and files
+makeDirectoriesAndFiles() {
+    echo "📁 Creating folders and files if necessary..."
+
+    for dir in src include build; do
+        if [ ! -d "$dir" ]; then
+            mkdir "$dir"
+            echo "✔ Created folder: $dir"
+        else
+            echo "✔ Folder exists: $dir"
+        fi
+    done
+
+    if [ ! -f CMakeLists.txt ]; then
+        fillMainCmakeFiles
+        echo "✔ Created file: CMakeLists.txt"
+    else
+        echo "✔ File exists: CMakeLists.txt"
+    fi
+
+    if [ ! -f src/main.cpp ]; then
+        fillMainFile
+        echo "✔ Created file: main.cpp"
+    else
+        echo "✔ File exists: main.cpp"
+    fi
+
+    if [ ! -f src/CMakeLists.txt ]; then
+        fillSrcCmakefiles
+        echo "✔ Created file: src/CMakeLists.txt"
+    else
+        echo "✔ File exists: src/CMakeLists.txt"
+    fi
+}
+
+# Generate main.cpp with an example
+fillMainFile() {
+    cat > src/main.cpp <<EOF
+#include <iostream>
+
+int main() {
+    std::cout << "AUTOMAK IS WORKING WELL" << std::endl;
+    return 0;
+}
+EOF
+    echo "✅ main.cpp generated"
+}
+
+# Generate the main CMakeLists.txt
+fillMainCmakeFiles() {
+    local projectName="App"
+    local cmake_version="3.10"
+
+    cat > CMakeLists.txt <<EOF
+cmake_minimum_required(VERSION ${cmake_version})
+project(${projectName})
+
+add_subdirectory(src)
+EOF
+    echo "✅ Main CMakeLists.txt generated"
+}
+
+# Generate src/CMakeLists.txt
+fillSrcCmakefiles() {
+    local compiler="app"
+
+    cat > src/CMakeLists.txt <<EOF
+file(GLOB_RECURSE SOURCES
+    "\${CMAKE_CURRENT_SOURCE_DIR}/*.cpp"
+)
+
+add_executable(${compiler} \${SOURCES})
+
+target_include_directories(${compiler} PRIVATE \${CMAKE_SOURCE_DIR}/include)
+EOF
+    echo "✅ src/CMakeLists.txt generated"
+}
+
+# Install a dependency based on OS platform
+installDependency() {
+    local cmd=$1
+    local os_platform
+    os_platform=$(uname)
+
+    if [[ "$os_platform" == "Darwin" ]]; then
+        if ! command -v brew >/dev/null 2>&1; then
+            echo "Homebrew is not installed. Do you want to install it? (y/N)"
+            read -r answer
+            if [[ "$answer" == "y" || "$answer" == "Y" ]]; then
+                /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+            else
+                echo "Installation canceled."
+                exit 1
+            fi
+        fi
+        echo "Installing $cmd using Homebrew..."
+        brew install "$cmd"
+    elif [[ "$os_platform" == "Linux" ]]; then
+        echo "Installing $cmd using apt..."
+        sudo apt update
+        sudo apt install -y "$cmd"
+    else
+        echo "Unsupported platform: $os_platform"
+        exit 1
+    fi
+}
+
+# Initialize build folder if it's empty
+initializeBuild() {
+    if [ -z "$(ls -A ./build)" ]; then
+        echo "🛠️ Initializing build directory..."
+        (cd build && cmake .. && make)
+    else
+        echo "✔ Build directory is not empty"
+    fi
+}
+
+
+
+autoBuildWatcher() {
+    
+  local watchPaths="src include"
+
+  # Watcher sur les fichiers modifiés (cpp, h, hpp) — reste en arrière-plan
+  find $watchPaths -type f \( -name "*.cpp" -o -name "*.h" -o -name "*.hpp" \) | entr sh -c '
+    echo "[⚙️  FILE MODIFIED]";
+    cd build && make && ./src/app
+  ' &
+  fileWatcherPID=$!
+
+  # Fonction de nettoyage
+  cleanup() {
+    echo "🛑 Arrêt demandé. Nettoyage..."
+    kill $fileWatcherPID 2>/dev/null
+    exit 0
+  }
+
+  # Capture Ctrl+C (SIGINT)
+  trap cleanup INT
+
+  # Boucle pour watcher structure
+  while true; do
+    echo "📡 Watcher : Rebuilding watch list for structure changes..."
+    find $watchPaths | entr -d sh -c '
+      echo "[🔁 STRUCTURE CHANGED]";
+      cd build && cmake .. && make ./src/app
+    '
+    echo "⏳ Structure changée, relance du watcher..."
+  done
+}
+
+
+
+# Main entry point
+main() {
+    checkDependency "entr"
+    checkDependency "cmake"
+    checkDependency "make"
+
+    makeDirectoriesAndFiles
+    initializeBuild
+    autoBuildWatcher
+}
+
+main

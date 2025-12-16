@@ -1,0 +1,8 @@
+package:automaking
+version:1.0
+Section:base
+Priority:optional
+Architecture:i686
+Maintainer:Emanuel Abizimi abizimi@x-studioapp.com
+Description: A smart Bash utility that automatically watches your C++ project for changes and rebuilds using CMake and Make. It’s designed for rapid C++ development with minimal configuration.
+Depends:bash
