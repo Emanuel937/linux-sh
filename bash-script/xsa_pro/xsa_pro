@@ -1,0 +1,141 @@
+#!/bin/bash
+
+GREEN="\e[32m"
+RED="\e[31m"
+YELLOW="\e[33m"
+RESET="\e[0m"
+
+function createProdFolder(){
+    mkdir -p prod
+    echo -e "📁 ${GREEN}Folder 'prod' created.${RESET}"
+}
+
+function createChildFolder(){
+    basename=$(basename "${PWD}")
+    mkdir -p "prod/${basename}"
+    echo -e "📁 ${GREEN}Folder ${basename} created inside prod.${RESET}"
+}
+
+function copyfilesFolder() {
+
+    basename=$(basename "${PWD}")
+    src="."
+    dest="./prod/${basename}"
+    mkdir -p "$dest"
+
+    # Read exclude="..."
+    exclude_list=""
+    for arg in "$@"; do
+        case "$arg" in
+            exclude=*)
+                exclude_list="${arg#exclude=}"
+                exclude_list="${exclude_list%\"}"
+                exclude_list="${exclude_list#\"}"
+                ;;
+        esac
+    done
+
+    # Convert exclude list into array
+    IFS=',' read -r -a excludes <<< "$exclude_list"
+
+    rsync_excludes=()
+
+    # 🔥 ALWAYS exclude prod folder (absolute rule)
+    rsync_excludes+=(--exclude="prod")
+
+    # Default folders to exclude
+    default_excluded_dirs=("src" "node_modules")
+
+    copy_root_files=true
+
+    # -----------------------------------------
+    # DEFAULT MODE (no exclude argument)
+    # -----------------------------------------
+    if [[ -z "$exclude_list" ]]; then
+
+        # Exclude default folders
+        for d in "${default_excluded_dirs[@]}"; do
+            rsync_excludes+=(--exclude="$d")
+        done
+
+        # Copy only PHP files from root:
+        # 1. Include all folders
+        # 2. Include only *.php files
+        # 3. Exclude everything else
+        rsync_excludes+=(
+            --include="*/"
+            --include="*.php"
+            --exclude="*"
+        )
+
+    else
+        # -----------------------------------------
+        # USER PROVIDED exclude="..."
+        # -----------------------------------------
+        for item in "${excludes[@]}"; do
+            
+            # "all" mode → do not copy any root files
+            if [[ "$item" == "all" ]]; then
+                copy_root_files=false
+                continue
+            fi
+
+            # Extension exclusion
+            if [[ "$item" == .* ]]; then
+                rsync_excludes+=(--exclude="*${item}")
+                continue
+            fi
+
+            # Folder exclusion
+            rsync_excludes+=(--exclude="${item}")
+        done
+
+        # If ALL mode → exclude all root files
+        if [[ "$copy_root_files" == false ]]; then
+            rsync_excludes+=(--exclude="*.*")
+        fi
+    fi
+
+    echo -e "📁 ${GREEN}Copy in progress...${RESET}"
+
+    rsync -av "${rsync_excludes[@]}" "$src/" "$dest/"
+
+    echo -e "✅ ${GREEN}Copy completed in ${dest}.${RESET}"
+}
+
+function zipBasedOnFolderName() {
+
+    folder_name=$(basename "${PWD}")
+
+    cd "prod/" || exit
+
+    zip -r "${folder_name}.zip" "${folder_name}"
+    echo -e "📦 ${GREEN}Folder 'prod/${folder_name}' zipped as '${folder_name}.zip'.${RESET}"
+
+    # Delete the child folder after zipping
+    rm -rf "${folder_name}"
+    echo -e "🧹 ${GREEN}Cleaned up 'prod/${folder_name}' folder after zipping.${RESET}"
+
+    cd ..
+}
+
+# -----------------------------------------
+# EXECUTION ORDER (corrected)
+# -----------------------------------------
+
+# Ensure prod exists
+if [[ -d "prod" ]]; then
+    echo -e "🔍 ${YELLOW}Folder 'prod' detected.${RESET}"
+else
+    echo -e "⚠️  ${RED}No 'prod' folder found.${RESET}"
+    createProdFolder
+fi
+
+# 1) Create prod/<basename>
+createChildFolder
+
+# 2) Copy files into prod/<basename>
+copyfilesFolder "$@"
+
+# 3) Zip prod/<basename> and clean it
+zipBasedOnFolderName

@@ -1,0 +1,15 @@
+#!/bin/bash
+
+BASE="/home/hackerpi/Desktop/workspace/linux-sh/bash-script"
+
+for dir in "$BASE"/*; do
+    if [[ -d "$dir" ]]; then
+        name=$(basename "$dir")
+        if [[ -f "$dir/$name" ]]; then
+            sudo ln -sf "$dir/$name" /usr/local/bin/"$name"
+            echo "Commande globale créée : $name"
+        else
+            echo "⚠️ Aucun script '$name' trouvé dans $dir"
+        fi
+    fi
+done
