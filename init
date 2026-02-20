@@ -1,6 +1,6 @@
 #!/bin/bash
 
-BASE="/home/hackerpi/Desktop/workspace/linux-sh/bash-script"
+BASE="./bash-script"
 
 for dir in "$BASE"/*; do
     if [[ -d "$dir" ]]; then
